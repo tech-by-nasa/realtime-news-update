@@ -1,0 +1,76 @@
+{
+  "name": "04 — NewsAPI Breaking Crisis News → Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 15 }] }
+      },
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://newsapi.org/v2/everything?q=(earthquake OR tsunami OR hurricane OR \"armed conflict\" OR evacuation OR \"disaster relief\")&sortBy=publishedAt&pageSize=10&apiKey={{ $env.NEWSAPI_KEY }}",
+        "options": { "response": { "response": { "responseFormat": "json" } } }
+      },
+      "name": "Fetch Crisis News",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const articles = $input.first().json?.articles || [];\n\nconst alerts = articles\n  .filter(a => a.title && a.title !== '[Removed]')\n  .map(a => {\n    return {\n      json: {\n        title: `📰 ${a.title}`,\n        summary: a.description || a.content?.substring(0, 200) || '',\n        source: 'NewsAPI',\n        source_url: a.url || '',\n        image_url: a.urlToImage || null,\n        severity: 'green',\n        event_type: 'news',\n        latitude: null,\n        longitude: null,\n        country: null,\n        source_id: `newsapi-${Buffer.from(a.url || a.title).toString('base64').substring(0, 50)}`\n      }\n    };\n  });\n\nreturn alerts.length > 0 ? alerts : [{ json: { _skip: true } }];"
+      },
+      "name": "Parse News Articles",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{
+            "leftValue": "={{ $json._skip }}",
+            "rightValue": true,
+            "operator": { "type": "boolean", "operation": "notEquals" }
+          }]
+        }
+      },
+      "name": "Has Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, summary: $json.summary, source: $json.source, source_url: $json.source_url, image_url: $json.image_url, severity: $json.severity, event_type: $json.event_type, latitude: $json.latitude, longitude: $json.longitude, country: $json.country, source_id: $json.source_id }) }}"
+      },
+      "name": "Write to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 260]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": { "main": [[{ "node": "Fetch Crisis News", "type": "main", "index": 0 }]] },
+    "Fetch Crisis News": { "main": [[{ "node": "Parse News Articles", "type": "main", "index": 0 }]] },
+    "Parse News Articles": { "main": [[{ "node": "Has Data?", "type": "main", "index": 0 }]] },
+    "Has Data?": { "main": [[{ "node": "Write to Supabase", "type": "main", "index": 0 }], []] }
+  }
+}
