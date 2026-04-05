@@ -1,0 +1,83 @@
+{
+  "name": "01 — GDACS Disaster Feed → Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 10 }]
+        }
+      },
+      "name": "Every 10 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH?eventlist=EQ,TC,FL,VO,DR,WF&fromDate={{$now.minus(1, 'day').toISO()}}&toDate={{$now.toISO()}}&alertlevel=Green;Orange;Red",
+        "options": {
+          "response": { "response": { "responseFormat": "json" } }
+        }
+      },
+      "name": "Fetch GDACS Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse GDACS response into clean alert objects\nconst events = $input.first().json?.features || [];\n\nconst alerts = events.map(event => {\n  const props = event.properties || {};\n  const coords = event.geometry?.coordinates || [0, 0];\n  \n  // Map GDACS alert levels to our severity\n  const severityMap = {\n    'Red': 'red',\n    'Orange': 'orange', \n    'Green': 'green'\n  };\n  \n  // Map GDACS event types to our types\n  const typeMap = {\n    'EQ': 'earthquake',\n    'TC': 'cyclone',\n    'FL': 'flood',\n    'VO': 'volcano',\n    'DR': 'drought',\n    'WF': 'wildfire'\n  };\n  \n  return {\n    json: {\n      title: props.name || props.eventname || 'GDACS Alert',\n      summary: `${props.description || ''} Severity: ${props.alertlevel || 'unknown'}. ${props.country || ''}`,\n      source: 'GDACS',\n      source_url: props.url || `https://www.gdacs.org/report.aspx?eventid=${props.eventid}&eventtype=${props.eventtype}`,\n      image_url: props.icon || null,\n      severity: severityMap[props.alertlevel] || 'green',\n      event_type: typeMap[props.eventtype] || 'news',\n      latitude: coords[1] || null,\n      longitude: coords[0] || null,\n      country: props.country || null,\n      source_id: `gdacs-${props.eventtype}-${props.eventid}`\n    }\n  };\n});\n\nreturn alerts.length > 0 ? alerts : [{ json: { _skip: true } }];"
+      },
+      "name": "Parse GDACS Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "notEquals" }
+            }
+          ]
+        }
+      },
+      "name": "Has Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, summary: $json.summary, source: $json.source, source_url: $json.source_url, image_url: $json.image_url, severity: $json.severity, event_type: $json.event_type, latitude: $json.latitude, longitude: $json.longitude, country: $json.country, source_id: $json.source_id }) }}"
+      },
+      "name": "Write to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 260]
+    }
+  ],
+  "connections": {
+    "Every 10 Minutes": { "main": [[{ "node": "Fetch GDACS Events", "type": "main", "index": 0 }]] },
+    "Fetch GDACS Events": { "main": [[{ "node": "Parse GDACS Data", "type": "main", "index": 0 }]] },
+    "Parse GDACS Data": { "main": [[{ "node": "Has Data?", "type": "main", "index": 0 }]] },
+    "Has Data?": { "main": [[{ "node": "Write to Supabase", "type": "main", "index": 0 }], []] }
+  }
+}
