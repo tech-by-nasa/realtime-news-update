@@ -29,8 +29,3 @@ magic-alert-box/
 │
 └── docs/
     └── DEPLOY_GUIDE.md              ← Step-by-step for a 5-year-old   
-    
-
-    │                                                                 │
-    │  ⏰ KEEPALIVE: UptimeRobot pings both services every 5 min     │
-    └─────────────────────────────────────────────────────────────────┘
