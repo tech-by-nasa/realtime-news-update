@@ -1,0 +1,76 @@
+{
+  "name": "03 — ReliefWeb Humanitarian Reports → Supabase",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "minutes", "minutesInterval": 30 }] }
+      },
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.reliefweb.int/v1/reports?appname=magic-alert-box&filter[field]=date.created&filter[value][from]=now-6h&filter[operator]=range&fields[include][]=title&fields[include][]=body-html&fields[include][]=url&fields[include][]=source&fields[include][]=country&fields[include][]=date.created&fields[include][]=primary_country&limit=20&sort[]=date.created:desc",
+        "options": { "response": { "response": { "responseFormat": "json" } } }
+      },
+      "name": "Fetch ReliefWeb Reports",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.first().json?.data || [];\n\nconst alerts = items.map(item => {\n  const fields = item.fields || {};\n  const country = fields.primary_country?.name || \n    (fields.country && fields.country[0]?.name) || null;\n  \n  // ReliefWeb doesn't have severity, so we use 'orange' for conflict\n  const bodySnippet = (fields['body-html'] || '').replace(/<[^>]*>/g, '').substring(0, 300);\n  \n  return {\n    json: {\n      title: fields.title || 'ReliefWeb Report',\n      summary: bodySnippet + '...',\n      source: 'ReliefWeb',\n      source_url: fields.url || `https://reliefweb.int/node/${item.id}`,\n      image_url: null,\n      severity: 'orange',\n      event_type: 'war',\n      latitude: null,\n      longitude: null,\n      country: country,\n      source_id: `reliefweb-${item.id}`\n    }\n  };\n});\n\nreturn alerts.length > 0 ? alerts : [{ json: { _skip: true } }];"
+      },
+      "name": "Parse Reports",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{
+            "leftValue": "={{ $json._skip }}",
+            "rightValue": true,
+            "operator": { "type": "boolean", "operation": "notEquals" }
+          }]
+        }
+      },
+      "name": "Has Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/alerts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey", "value": "={{ $env.SUPABASE_KEY }}" },
+            { "name": "Authorization", "value": "Bearer {{ $env.SUPABASE_KEY }}" },
+            { "name": "Content-Type", "value": "application/json" },
+            { "name": "Prefer", "value": "resolution=merge-duplicates" }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, summary: $json.summary, source: $json.source, source_url: $json.source_url, image_url: $json.image_url, severity: $json.severity, event_type: $json.event_type, latitude: $json.latitude, longitude: $json.longitude, country: $json.country, source_id: $json.source_id }) }}"
+      },
+      "name": "Write to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 260]
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": { "main": [[{ "node": "Fetch ReliefWeb Reports", "type": "main", "index": 0 }]] },
+    "Fetch ReliefWeb Reports": { "main": [[{ "node": "Parse Reports", "type": "main", "index": 0 }]] },
+    "Parse Reports": { "main": [[{ "node": "Has Data?", "type": "main", "index": 0 }]] },
+    "Has Data?": { "main": [[{ "node": "Write to Supabase", "type": "main", "index": 0 }], []] }
+  }
+}
