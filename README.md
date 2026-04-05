@@ -1,9 +1,36 @@
 # realtime-news-update
 The real-time update of the news around the world.
 The architecture diagram of the main-frame
-   ┌─────────────────────────────────────────────────────────────────┐ │ 🌍 THE INTERNET │ │ │ │ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────────┐ │ │ │ GDACS │ │ USGS │ │ ReliefWeb│ │ NewsAPI │ │ │ │ (UN/EU) │ │(US Govt) │ │ (UN OCHA)│ │ (News+Images) │ │ │ └────┬─────┘ └────┬─────┘ └────┬─────┘ └───────┬──────────┘ │ │ │ │ │ │ │ │ └──────┬──────┴─────┬──────┘ │ │ │ │ │ │ │ │ ▼ ▼ ▼ │ │ ┌──────────────────────────────────────────────────────────┐ │ │ │ 🧠 n8n BRAIN — render.com (Cloud A) │ │ │ │ │ │ │ │ Workflow 01: GDACS disasters every 10 min │ │ │ │ Workflow 02: USGS earthquakes every 5 min │ │ │ │ Workflow 03: ReliefWeb reports every 30 min │ │ │ │ Workflow 04: NewsAPI crisis news every 15 min │ │ │ │ │ │ │ │ Each workflow: Fetch → Parse → Deduplicate → Write │ │ │ └──────────────────────┬───────────────────────────────────┘ │ │ │ │ │ │ HTTPS POST (insert alert) │ │ ▼ │ │ ┌──────────────────────────────────────────────────────────┐ │ │ │ 🗄️ SUPABASE MEMORY — supabase.com (Cloud B) │ │ │ │ │ │ │ │ PostgreSQL: "alerts" table │ │ │ │ ┌─────────────────────────────────────────────────┐ │ │ │ │ │ id │ title │ summary │ severity │ image_url │...│ │ │ │ │ │ 1 │ M6.2 │ Peru... │ orange │ https://..│ │ │ │ │ │ │ 2 │ Cycl │ India.. │ red │ https://..│ │ │ │ │ │ └─────────────────────────────────────────────────┘ │ │ │ │ + Row Level Security + Indexes + Deduplication │ │ │ └──────────────────────┬───────────────────────────────────┘ │ │ │ │ │ │ HTTPS GET (read latest alerts) │ │ ▼ │ │ ┌──────────────────────────────────────────────────────────┐ │ │ │ 🖥️ STREAMLIT FACE — huggingface.co/spaces (Cloud C) │ │ │ │ │ │ │ │ ┌────────────────────────────────────┐ │ │ │ │ │ 🚨 MAGIC ALERT BOX │ │ │ │ │ │ ┌─────────────────────────────┐ │ │ │ │ │ │ │ 🗺️ WORLD MAP │ │ │ │ │ │ │ │ (pydeck / scatterplot) │ │ │ │ │ │ │ │ 🔴 Peru 🔴 India 🟠 Italy│ │ │ │ │ │ │ └─────────────────────────────┘ │ │ │ │ │ │ │ │ │ │ │ │ 🔴 CRITICAL: Cyclone Bay Bengal │ │ │ │ │ │ [image] 2h ago · GDACS │ │ │ │ │ │ 🟠 WARNING: M6.2 Earthquake Peru │ │ │ │ │ │ [image] 5h ago · USGS │ │ │ │ │ │ 🟢 ADVISORY: Relief Update DRC │ │ │ │ │ │ 12h ago · ReliefWeb │ │ │ │ │ └────────────────────────────────────┘ │ │ │ └──────────────────────────────────────────────────────────┘ │ │ │ │ ⏰ KEEPALIVE: UptimeRobot pings both services every 5 min │ └─────────────────────────────────────────────────────────────────┘
-    │  │  └────────────────────────────────────┘                  │   │
-    │  └──────────────────────────────────────────────────────────┘   │
+magic-alert-box/
+│
+├── README.md                        ← The big instruction poster
+│
+├── n8n-render/                      ← 🧠 THE BRAIN (deploys n8n to Render)
+│   └── render.yaml
+│
+├── supabase-setup/                  ← 🗄️ THE MEMORY (database setup)
+│   └── create_tables.sql
+│
+├── alert-website/                   ← 🖥️ THE FACE (Streamlit website)
+│   ├── src/
+│   │   └── app.py
+│   ├── requirements.txt
+│   ├── Dockerfile
+│   └── README.md                    ← HuggingFace Space config
+│
+├── n8n-workflows/                   ← 🔄 THE BRAIN'S INSTRUCTIONS
+│   ├── 01_gdacs_disaster_feed.json
+│   ├── 02_usgs_earthquake_feed.json
+│   ├── 03_reliefweb_reports.json
+│   └── 04_newsapi_scanner.json
+│
+├── keepalive/                       ← ⏰ THE ALARM CLOCK (anti-sleep)
+│   └── keepalive.py
+│
+└── docs/
+    └── DEPLOY_GUIDE.md              ← Step-by-step for a 5-year-old   
+
+
     │                                                                 │
     │  ⏰ KEEPALIVE: UptimeRobot pings both services every 5 min     │
     └─────────────────────────────────────────────────────────────────┘
