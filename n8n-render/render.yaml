@@ -1,0 +1,66 @@
+# ============================================================
+# render.yaml — Deploys n8n (The Brain) to Render.com
+# ============================================================
+# HOW TO USE:
+# 1. Fork this repo to your GitHub
+# 2. Go to render.com → New → Blueprint
+# 3. Connect your forked repo
+# 4. Click "Deploy Blueprint"
+# 5. Wait 5-10 minutes. Done!
+# ============================================================
+
+services:
+  - type: web
+    name: magic-alert-brain
+    runtime: image
+    image:
+      url: docker.io/n8nio/n8n:latest
+    plan: free
+    envVars:
+      - key: N8N_PORT
+        value: "5678"
+      - key: PORT
+        value: "5678"
+      - key: WEBHOOK_URL
+        fromService:
+          name: magic-alert-brain
+          type: web
+          property: host
+      - key: N8N_ENCRYPTION_KEY
+        generateValue: true
+      - key: DB_TYPE
+        value: postgresdb
+      - key: DB_POSTGRESDB_DATABASE
+        fromDatabase:
+          name: magic-alert-db
+          property: database
+      - key: DB_POSTGRESDB_HOST
+        fromDatabase:
+          name: magic-alert-db
+          property: host
+      - key: DB_POSTGRESDB_PORT
+        fromDatabase:
+          name: magic-alert-db
+          property: port
+      - key: DB_POSTGRESDB_USER
+        fromDatabase:
+          name: magic-alert-db
+          property: user
+      - key: DB_POSTGRESDB_PASSWORD
+        fromDatabase:
+          name: magic-alert-db
+          property: password
+      - key: N8N_BASIC_AUTH_ACTIVE
+        value: "true"
+      - key: N8N_BASIC_AUTH_USER
+        value: "admin"
+      # CHANGE THIS PASSWORD before deploying!
+      - key: N8N_BASIC_AUTH_PASSWORD
+        value: "ChangeMe_SuperSecret_2026!"
+    healthCheckPath: /healthz
+
+databases:
+  - name: magic-alert-db
+    plan: free
+    databaseName: n8n_magic
+    user: n8n_user
